@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Vokabel Multiplayer Spiel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(250deg, #20d1e1, #b638ff);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { font-size: 3em; margin-bottom: 20px; text-shadow: 2px 2px #00000050; }
+  button {
+    padding: 12px 24px;
+    margin: 10px;
+    background: rgba(0,0,0,0.3);
+    border: 2px solid #fff;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 10px;
+    font-size: 1.2em;
+    transition: all 0.2s ease;
+  }
+  button:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+  #menu, #gameArea { display: flex; flex-direction: column; align-items: center; }
+  #gameArea { margin-top: 20px; width: 100%; max-width: 500px; display: none; }
+  .question { font-size: 1.8em; margin: 15px 0; text-align: center; }
+  .answers { display: flex; flex-direction: column; width: 100%; }
+  .answers button {
+    margin: 5px 0;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    border-radius: 8px;
+    font-size: 1.2em;
+    transition: all 0.2s ease;
+  }
+  .answers button:hover { background: rgba(255,255,255,0.4); }
+  .correct { background: #28a745 !important; color: #fff; }
+  .wrong { background: #dc3545 !important; color: #fff; }
+  #score { margin-top: 10px; font-size: 1.5em; }
+  #status { margin-top: 10px; font-weight: bold; color: #ffeb3b; text-shadow: 1px1px #000; }
+</style>
+</head>
+<body>
+
+<h1>Vokabel Multiplayer Spiel</h1>
+
+<div id="menu">
+  <button id="createRoomBtn">Room erstellen</button>
+  <button id="joinRoomBtn">Room joinen</button>
+  <div id="status"></div>
+</div>
+
+<div id="gameArea">
+  <div id="roomInfo"></div>
+  <div id="questionContainer"></div>
+  <div id="score">Punkte: 0</div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+// Lokaler Test: Node.js Server auf localhost:3000
+const socket = io("https://unrepining-airtightly-jerrica.ngrok-free.dev/"); 
+
+let questions = [];
+let currentQuestionIndex = 0;
+let score = 0;
+
+// Status Feedback
+socket.on("connect", () => document.getElementById("status").textContent = "Verbunden mit Server!");
+socket.on("disconnect", () => document.getElementById("status").textContent = "Server offline!");
+
+// Room erstellen
+document.getElementById("createRoomBtn").onclick = () => {
+  socket.emit("createRoom");
+};
+
+// Room joinen
+document.getElementById("joinRoomBtn").onclick = () => {
+  const code = prompt("Room-Code eingeben:");
+  if(code) socket.emit("joinRoom", { roomCode: code });
+};
+
+// Server Events
+socket.on("roomCreated", ({ roomCode }) => {
+  document.getElementById("roomInfo").textContent = "Room: " + roomCode;
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("gameArea").style.display = "flex";
+});
+
+socket.on("errorMessage", ({ message }) => alert(message));
+socket.on("startGame", (data) => document.getElementById("status").textContent = data.message);
+socket.on("vocabQuestions", (vocab) => {
+  questions = vocab;
+  currentQuestionIndex = 0;
+  score = 0;
+  showQuestion();
+});
+
+// Frage anzeigen
+function showQuestion() {
+  const container = document.getElementById("questionContainer");
+  container.innerHTML = "";
+  if(currentQuestionIndex >= questions.length) {
+    alert("Spiel beendet! Punkte: " + score);
+    return;
+  }
+
+  const q = questions[currentQuestionIndex];
+  const questionDiv = document.createElement("div");
+  questionDiv.className = "question";
+  questionDiv.textContent = "Übersetze: " + q.fr;
+  container.appendChild(questionDiv);
+
+  const answersDiv = document.createElement("div");
+  answersDiv.className = "answers";
+
+  // Buttons mit korrekter + 3 falschen Antworten
+  const answers = [q.de];
+  while(answers.length < 4) {
+    const rand = questions[Math.floor(Math.random() * questions.length)].de;
+    if(!answers.includes(rand)) answers.push(rand);
+  }
+  answers.sort(() => Math.random() - 0.5);
+
+  answers.forEach(ans => {
+    const btn = document.createElement("button");
+    btn.textContent = ans;
+    btn.onclick = () => answerQuestion(ans);
+    answersDiv.appendChild(btn);
+  });
+
+  container.appendChild(answersDiv);
+}
+
+// Antwort prüfen
+function answerQuestion(answer) {
+  const correct = questions[currentQuestionIndex].de;
+  const buttons = document.querySelectorAll(".answers button");
+
+  buttons.forEach(btn => {
+    btn.disabled = true;
+    if(btn.textContent === correct) btn.classList.add("correct");
+    else if(btn.textContent === answer) btn.classList.add("wrong");
+  });
+
+  if(answer === correct) score++;
+  document.getElementById("score").textContent = "Punkte: " + score;
+
+  socket.emit("answer", { 
+    roomCode: document.getElementById("roomInfo").textContent.split(" ")[1],
+    questionIndex: currentQuestionIndex,
+    answer
+  });
+
+  setTimeout(() => {
+    currentQuestionIndex++;
+    showQuestion();
+  }, 1000);
+}
+</script>
+</body>
+</html>
