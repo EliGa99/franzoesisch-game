@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Vokabel Multiplayer Spiel</title>
+<title>Vokabel Trainer & Multiplayer</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -16,153 +16,196 @@
     padding: 20px;
   }
   h1 { font-size: 3em; margin-bottom: 20px; text-shadow: 2px 2px #00000050; }
+
   button {
-    padding: 12px 24px;
+    padding: 15px 30px;
     margin: 10px;
     background: rgba(0,0,0,0.3);
     border: 2px solid #fff;
     color: #fff;
     cursor: pointer;
     border-radius: 10px;
-    font-size: 1.2em;
+    font-size: 1.4em;
     transition: all 0.2s ease;
   }
   button:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
-  #menu, #gameArea { display: flex; flex-direction: column; align-items: center; }
-  #gameArea { margin-top: 20px; width: 100%; max-width: 500px; display: none; }
-  .question { font-size: 1.8em; margin: 15px 0; text-align: center; }
-  .answers { display: flex; flex-direction: column; width: 100%; }
-  .answers button {
-    margin: 5px 0;
-    background: rgba(255,255,255,0.2);
-    border: none;
-    border-radius: 8px;
-    font-size: 1.2em;
-    transition: all 0.2s ease;
+
+  #menu, #trainMenu, #trainerArea {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
-  .answers button:hover { background: rgba(255,255,255,0.4); }
-  .correct { background: #28a745 !important; color: #fff; }
-  .wrong { background: #dc3545 !important; color: #fff; }
-  #score { margin-top: 10px; font-size: 1.5em; }
-  #status { margin-top: 10px; font-weight: bold; color: #ffeb3b; text-shadow: 1px1px #000; }
+
+  #trainMenu, #trainerArea { display: none; }
+
+  .question { font-size: 2em; margin: 20px 0; text-align: center; }
+  .answers button { width: 100%; margin: 5px 0; }
+  .correct { background: #28a745 !important; }
+  .wrong { background: #dc3545 !important; }
+  #trainerScore { margin-top: 20px; font-size: 1.5em; }
 </style>
 </head>
 <body>
 
-<h1>Vokabel Multiplayer Spiel</h1>
+<h1>Vokabel-Battle Menü</h1>
 
+<!-- Hauptmenü -->
 <div id="menu">
-  <button id="createRoomBtn">Room erstellen</button>
-  <button id="joinRoomBtn">Room joinen</button>
+  <button onclick="checkServer()">Online spielen</button>
+  <button onclick='showTrainMenu()'>Vokabeln üben</button>
   <div id="status"></div>
 </div>
 
-<div id="gameArea">
-  <div id="roomInfo"></div>
-  <div id="questionContainer"></div>
-  <div id="score">Punkte: 0</div>
+<!-- Trainingsmenü -->
+<div id="trainMenu">
+  <h2>Übungsmodus wählen</h2>
+  <button onclick="startMultipleChoice()">Multiple Choice</button>
+  <button onclick="startWriting()">Schreiben</button>
+  <button onclick="backToMenu()">Zurück</button>
 </div>
 
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<!-- Trainer -->
+<div id="trainerArea">
+  <div id="trainerQuestion" class="question"></div>
+  <div id="trainerAnswers" class="answers"></div>
+  <input id="writeInput" style="display:none; padding:10px; font-size:1.2em; width:80%; border-radius:10px;">
+  <button id="submitWrite" style="display:none; margin-top:10px;" onclick="submitWriting()">Antwort prüfen</button>
+  <div id="trainerScore">Punkte: 0</div>
+  <button onclick="nextTrainerQuestion()">Nächste Frage</button>
+  <button onclick="backToMenu()">Zurück</button>
+</div>
+
 <script>
-// Lokaler Test: Node.js Server auf localhost:3000
-const socket = io("https://unrepining-airtightly-jerrica.ngrok-free.dev/"); 
+// Multiplayer Server URL
+const SERVER_URL = "https://unrepining-airtightly-jerrica.ngrok-free.dev";
 
-let questions = [];
-let currentQuestionIndex = 0;
-let score = 0;
+// Vokabeln laden
+let vocab = [];
+fetch("/home/elias/Desktop/Digital_Classroom/fr-de.json")
+  .then(r => r.json())
+  .then(data => vocab = data);
 
-// Status Feedback
-socket.on("connect", () => document.getElementById("status").textContent = "Verbunden mit Server!");
-socket.on("disconnect", () => document.getElementById("status").textContent = "Server offline!");
-
-// Room erstellen
-document.getElementById("createRoomBtn").onclick = () => {
-  socket.emit("createRoom");
-};
-
-// Room joinen
-document.getElementById("joinRoomBtn").onclick = () => {
-  const code = prompt("Room-Code eingeben:");
-  if(code) socket.emit("joinRoom", { roomCode: code });
-};
-
-// Server Events
-socket.on("roomCreated", ({ roomCode }) => {
-  document.getElementById("roomInfo").textContent = "Room: " + roomCode;
+// Menü Navigation
+function showTrainMenu() {
   document.getElementById("menu").style.display = "none";
-  document.getElementById("gameArea").style.display = "flex";
-});
-
-socket.on("errorMessage", ({ message }) => alert(message));
-socket.on("startGame", (data) => document.getElementById("status").textContent = data.message);
-socket.on("vocabQuestions", (vocab) => {
-  questions = vocab;
-  currentQuestionIndex = 0;
-  score = 0;
-  showQuestion();
-});
-
-// Frage anzeigen
-function showQuestion() {
-  const container = document.getElementById("questionContainer");
-  container.innerHTML = "";
-  if(currentQuestionIndex >= questions.length) {
-    alert("Spiel beendet! Punkte: " + score);
-    return;
-  }
-
-  const q = questions[currentQuestionIndex];
-  const questionDiv = document.createElement("div");
-  questionDiv.className = "question";
-  questionDiv.textContent = "Übersetze: " + q.fr;
-  container.appendChild(questionDiv);
-
-  const answersDiv = document.createElement("div");
-  answersDiv.className = "answers";
-
-  // Buttons mit korrekter + 3 falschen Antworten
-  const answers = [q.de];
-  while(answers.length < 4) {
-    const rand = questions[Math.floor(Math.random() * questions.length)].de;
-    if(!answers.includes(rand)) answers.push(rand);
-  }
-  answers.sort(() => Math.random() - 0.5);
-
-  answers.forEach(ans => {
-    const btn = document.createElement("button");
-    btn.textContent = ans;
-    btn.onclick = () => answerQuestion(ans);
-    answersDiv.appendChild(btn);
-  });
-
-  container.appendChild(answersDiv);
+  document.getElementById("trainMenu").style.display = "flex";
 }
 
-// Antwort prüfen
-function answerQuestion(answer) {
-  const correct = questions[currentQuestionIndex].de;
-  const buttons = document.querySelectorAll(".answers button");
+function backToMenu() {
+  document.getElementById("trainMenu").style.display = "none";
+  document.getElementById("trainerArea").style.display = "none";
+  document.getElementById("menu").style.display = "flex";
+}
 
-  buttons.forEach(btn => {
-    btn.disabled = true;
-    if(btn.textContent === correct) btn.classList.add("correct");
-    else if(btn.textContent === answer) btn.classList.add("wrong");
+// Server Check
+function checkServer() {
+  document.getElementById("status").textContent = "Prüfe Server...";
+
+  fetch(SERVER_URL, { method: "GET" })
+    .then(() => {
+      window.location.href = "https://unrepining-airtightly-jerrica.ngrok-free.dev/"; // Multiplayer Seite
+    })
+    .catch(() => {
+      document.getElementById("status").textContent = "❌ Server offline!";
+    });
+}
+
+// Trainer Variablen
+let trainerIndex = 0;
+let trainerScore = 0;
+let trainerMode = "mc"; // mc = multiple choice, write = schreiben
+
+// Multiple Choice starten
+function startMultipleChoice() {
+  trainerMode = "mc";
+  trainerIndex = 0;
+  trainerScore = 0;
+  document.getElementById("trainerScore").textContent = "Punkte: 0";
+
+  document.getElementById("trainMenu").style.display = "none";
+  document.getElementById("trainerArea").style.display = "flex";
+
+  nextTrainerQuestion();
+}
+
+// Schreiben starten
+function startWriting() {
+  trainerMode = "write";
+  trainerIndex = 0;
+  trainerScore = 0;
+  document.getElementById("trainerScore").textContent = "Punkte: 0";
+
+  document.getElementById("trainMenu").style.display = "none";
+  document.getElementById("trainerArea").style.display = "flex";
+
+  nextTrainerQuestion();
+}
+
+// Neue Frage
+function nextTrainerQuestion() {
+  const q = vocab[Math.floor(Math.random() * vocab.length)];
+
+  document.getElementById("trainerQuestion").textContent = "Übersetze: " + q.fr;
+  document.getElementById("trainerAnswers").innerHTML = "";
+  document.getElementById("writeInput").style.display = "none";
+  document.getElementById("submitWrite").style.display = "none";
+
+  if (trainerMode === "mc") {
+    showMultipleChoice(q);
+  } else {
+    showWriting(q);
+  }
+}
+
+// Multiple Choice
+function showMultipleChoice(q) {
+  const answersDiv = document.getElementById("trainerAnswers");
+  let answers = [q.de];
+
+  while (answers.length < 4) {
+    const rand = vocab[Math.floor(Math.random() * vocab.length)].de;
+    if (!answers.includes(rand)) answers.push(rand);
+  }
+
+  answers.sort(() => Math.random() - 0.5);
+
+  answers.forEach(a => {
+    const btn = document.createElement("button");
+    btn.textContent = a;
+    btn.onclick = () => {
+      if (a === q.de) {
+        btn.classList.add("correct");
+        trainerScore++;
+      } else {
+        btn.classList.add("wrong");
+      }
+      document.getElementById("trainerScore").textContent = "Punkte: " + trainerScore;
+    };
+    answersDiv.appendChild(btn);
   });
+}
 
-  if(answer === correct) score++;
-  document.getElementById("score").textContent = "Punkte: " + score;
+// Schreiben
+let currentWriteAnswer = "";
 
-  socket.emit("answer", { 
-    roomCode: document.getElementById("roomInfo").textContent.split(" ")[1],
-    questionIndex: currentQuestionIndex,
-    answer
-  });
+function showWriting(q) {
+  currentWriteAnswer = q.de;
 
-  setTimeout(() => {
-    currentQuestionIndex++;
-    showQuestion();
-  }, 1000);
+  document.getElementById("trainerAnswers").innerHTML = "";
+  document.getElementById("writeInput").value = "";
+  document.getElementById("writeInput").style.display = "block";
+  document.getElementById("submitWrite").style.display = "block";
+}
+
+function submitWriting() {
+  const input = document.getElementById("writeInput").value.trim();
+  if (input.toLowerCase() === currentWriteAnswer.toLowerCase()) {
+    trainerScore++;
+    alert("Richtig!");
+  } else {
+    alert("Falsch! Richtig wäre: " + currentWriteAnswer);
+  }
+  document.getElementById("trainerScore").textContent = "Punkte: " + trainerScore;
 }
 </script>
 </body>
