@@ -79,7 +79,7 @@
 // Multiplayer Server URL
 const SERVER_URL = "https://unrepining-airtightly-jerrica.ngrok-free.dev";
 
-// Vokabeln laden
+// ⭐ Offline-Vokabeln
 const vocab = [
   { "fr": "le matin", "de": "der Morgen" },
   { "fr": "l'après-midi", "de": "der Nachmittag" },
@@ -169,43 +169,33 @@ function backToMenu() {
 function checkServer() {
   document.getElementById("status").textContent = "Prüfe Server...";
 
-  fetch(SERVER_URL, { method: "GET" })
-    .then(() => {
-      window.location.href = "https://unrepining-airtightly-jerrica.ngrok-free.dev/"; // Multiplayer Seite
-    })
-    .catch(() => {
-      document.getElementById("status").textContent = "❌ Server offline!";
-    });
+  fetch(SERVER_URL)
+    .then(() => window.location.href = SERVER_URL)
+    .catch(() => document.getElementById("status").textContent = "❌ Server offline!");
 }
 
 // Trainer Variablen
-let trainerIndex = 0;
 let trainerScore = 0;
-let trainerMode = "mc"; // mc = multiple choice, write = schreiben
+let trainerMode = "mc";
+let currentCorrectAnswer = "";
 
 // Multiple Choice starten
 function startMultipleChoice() {
   trainerMode = "mc";
-  trainerIndex = 0;
   trainerScore = 0;
   document.getElementById("trainerScore").textContent = "Punkte: 0";
-
   document.getElementById("trainMenu").style.display = "none";
   document.getElementById("trainerArea").style.display = "flex";
-
   nextTrainerQuestion();
 }
 
 // Schreiben starten
 function startWriting() {
   trainerMode = "write";
-  trainerIndex = 0;
   trainerScore = 0;
   document.getElementById("trainerScore").textContent = "Punkte: 0";
-
   document.getElementById("trainMenu").style.display = "none";
   document.getElementById("trainerArea").style.display = "flex";
-
   nextTrainerQuestion();
 }
 
@@ -213,25 +203,26 @@ function startWriting() {
 function nextTrainerQuestion() {
   const q = vocab[Math.floor(Math.random() * vocab.length)];
 
-  document.getElementById("trainerQuestion").textContent = "Übersetze: " + q.fr;
+  // ⭐ Jetzt wird DE angezeigt → FR muss geschrieben werden
+  document.getElementById("trainerQuestion").textContent = "Französisch für: " + q.de;
+
+  currentCorrectAnswer = q.fr;
+
   document.getElementById("trainerAnswers").innerHTML = "";
   document.getElementById("writeInput").style.display = "none";
   document.getElementById("submitWrite").style.display = "none";
 
-  if (trainerMode === "mc") {
-    showMultipleChoice(q);
-  } else {
-    showWriting(q);
-  }
+  if (trainerMode === "mc") showMultipleChoice(q);
+  else showWriting(q);
 }
 
 // Multiple Choice
 function showMultipleChoice(q) {
   const answersDiv = document.getElementById("trainerAnswers");
-  let answers = [q.de];
+  let answers = [q.fr];
 
   while (answers.length < 4) {
-    const rand = vocab[Math.floor(Math.random() * vocab.length)].de;
+    const rand = vocab[Math.floor(Math.random() * vocab.length)].fr;
     if (!answers.includes(rand)) answers.push(rand);
   }
 
@@ -241,7 +232,7 @@ function showMultipleChoice(q) {
     const btn = document.createElement("button");
     btn.textContent = a;
     btn.onclick = () => {
-      if (a === q.de) {
+      if (a === q.fr) {
         btn.classList.add("correct");
         trainerScore++;
       } else {
@@ -254,25 +245,24 @@ function showMultipleChoice(q) {
 }
 
 // Schreiben
-let currentWriteAnswer = "";
-
 function showWriting(q) {
-  currentWriteAnswer = q.de;
-
-  document.getElementById("trainerAnswers").innerHTML = "";
   document.getElementById("writeInput").value = "";
   document.getElementById("writeInput").style.display = "block";
   document.getElementById("submitWrite").style.display = "block";
 }
 
+// ⭐ Case-insensitive, aber Akzente & Apostrophe bleiben Pflicht
 function submitWriting() {
   const input = document.getElementById("writeInput").value.trim();
-  if (input.toLowerCase() === currentWriteAnswer.toLowerCase()) {
+  const correct = currentCorrectAnswer;
+
+  if (input.toLowerCase() === correct.toLowerCase()) {
     trainerScore++;
     alert("Richtig!");
   } else {
-    alert("Falsch! Richtig wäre: " + currentWriteAnswer);
+    alert("Falsch! Richtig wäre: " + correct);
   }
+
   document.getElementById("trainerScore").textContent = "Punkte: " + trainerScore;
 }
 </script>
